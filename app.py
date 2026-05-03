@@ -1,148 +1,82 @@
-import streamlit as st
+import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Blackjack Pro Tool", layout="wide")
+html_code = """
+<style>
+.container {
+  display: flex;
+  gap: 20px;
+}
 
-# --- STATE ---
-if "start" not in st.session_state:
-    st.session_state.start = False
-if "deck" not in st.session_state:
-    st.session_state.deck = {}
-if "player" not in st.session_state:
-    st.session_state.player = []
-if "dealer" not in st.session_state:
-    st.session_state.dealer = []
-if "seen" not in st.session_state:
-    st.session_state.seen = []
-if "num_decks" not in st.session_state:
-    st.session_state.num_decks = 4
+.column {
+  flex: 1;
+  min-height: 200px;
+  border: 2px dashed #ccc;
+  padding: 10px;
+  border-radius: 10px;
+}
 
-# --- INIT ---
-def reset():
-    cards = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
-    st.session_state.deck = {c: 4 * st.session_state.num_decks for c in cards}
-    st.session_state.player = []
-    st.session_state.dealer = []
-    st.session_state.seen = []
+.card {
+  display: inline-block;
+  padding: 10px;
+  margin: 5px;
+  background: #eee;
+  border-radius: 8px;
+  cursor: grab;
+}
+</style>
 
-def value(c):
-    if c in ['J','Q','K']: return 10
-    if c == 'A': return 11
-    return int(c)
+<div class="container">
+  <div>
+    <h4>🃏 Cards</h4>
+    <div id="cards">
+      <div class="card" draggable="true">2</div>
+      <div class="card" draggable="true">3</div>
+      <div class="card" draggable="true">4</div>
+      <div class="card" draggable="true">5</div>
+      <div class="card" draggable="true">6</div>
+      <div class="card" draggable="true">7</div>
+      <div class="card" draggable="true">8</div>
+      <div class="card" draggable="true">9</div>
+      <div class="card" draggable="true">10</div>
+      <div class="card" draggable="true">J</div>
+      <div class="card" draggable="true">Q</div>
+      <div class="card" draggable="true">K</div>
+      <div class="card" draggable="true">A</div>
+    </div>
+  </div>
 
-def score(hand):
-    total = sum(value(c) for c in hand)
-    aces = hand.count('A')
-    while total > 21 and aces:
-        total -= 10
-        aces -= 1
-    return total
+  <div class="column" id="player">🧑 Player</div>
+  <div class="column" id="dealer">🎩 Dealer</div>
+  <div class="column" id="seen">🧾 Seen</div>
+</div>
 
-def draw(target, c):
-    if st.session_state.deck[c] > 0:
-        st.session_state.deck[c] -= 1
-        target.append(c)
+<script>
+let dragged;
 
-def add_seen(c):
-    if st.session_state.deck[c] > 0:
-        st.session_state.deck[c] -= 1
-        st.session_state.seen.append(c)
+document.querySelectorAll('.card').forEach(card => {
+  card.addEventListener('dragstart', e => {
+    dragged = e.target.innerText;
+  });
+});
 
-def bust_prob(current):
-    total = sum(st.session_state.deck.values())
-    bust = 0
-    for c, cnt in st.session_state.deck.items():
-        if current + value(c) > 21:
-            bust += cnt
-    return bust / total if total else 0
+document.querySelectorAll('.column').forEach(col => {
+  col.addEventListener('dragover', e => e.preventDefault());
 
-# --- SETUP ---
-if not st.session_state.start:
-    st.title("🃏 Blackjack Tool Pro")
+  col.addEventListener('drop', e => {
+    e.preventDefault();
+    const newCard = document.createElement("div");
+    newCard.className = "card";
+    newCard.innerText = dragged;
+    col.appendChild(newCard);
 
-    st.session_state.num_decks = st.number_input("Số bộ bài", 1, 8, 4)
+    // gửi dữ liệu về Streamlit
+    window.parent.postMessage({
+      type: "streamlit:setComponentValue",
+      value: {card: dragged, target: col.id}
+    }, "*");
+  });
+});
+</script>
+"""
 
-    if st.button("🚀 Bắt đầu", use_container_width=True):
-        reset()
-        st.session_state.start = True
-        st.rerun()
-
-# --- MAIN ---
-else:
-    st.title("🎯 Phân tích + Đếm bài")
-
-    # --- HIỂN THỊ ---
-    c1, c2 = st.columns(2)
-
-    with c1:
-        st.subheader("🧑 Bạn")
-        st.write(st.session_state.player)
-        p = score(st.session_state.player)
-        st.metric("Điểm", p)
-
-    with c2:
-        st.subheader("🎩 Dealer")
-        st.write(st.session_state.dealer)
-        d = score(st.session_state.dealer)
-        st.metric("Điểm", d)
-
-    st.divider()
-
-    # --- PHÂN TÍCH ---
-    if st.session_state.player:
-        prob = bust_prob(p)
-        st.write(f"💀 Bust nếu rút: **{prob*100:.1f}%**")
-
-        if prob > 0.5:
-            st.error("❌ NÊN DỪNG")
-        elif prob < 0.3:
-            st.success("✅ NÊN RÚT")
-        else:
-            st.info("⚖️ CÂN NHẮC")
-
-    st.divider()
-
-    # --- MODE ---
-    mode = st.radio("Thêm bài cho:", ["Bạn", "Dealer", "Bài đã ra"], horizontal=True)
-
-    # --- GRID 3 CỘT ---
-    st.write("### 👇 Chọn lá bài")
-
-    cards = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
-    cols = st.columns(3)
-
-    for i, c in enumerate(cards):
-        with cols[i % 3]:
-            if st.button(c, key=f"{mode}_{c}", use_container_width=True):
-                if mode == "Bạn":
-                    draw(st.session_state.player, c)
-                elif mode == "Dealer":
-                    draw(st.session_state.dealer, c)
-                else:
-                    add_seen(c)
-                st.rerun()
-
-    st.divider()
-
-    # --- INFO ---
-    st.write(f"🧾 Bài đã ra: {len(st.session_state.seen)} lá")
-
-    # --- ACTION ---
-    c1, c2 = st.columns(2)
-
-    with c1:
-        if st.button("↩️ Undo", use_container_width=True):
-            if mode == "Bạn" and st.session_state.player:
-                last = st.session_state.player.pop()
-                st.session_state.deck[last] += 1
-            elif mode == "Dealer" and st.session_state.dealer:
-                last = st.session_state.dealer.pop()
-                st.session_state.deck[last] += 1
-            elif mode == "Bài đã ra" and st.session_state.seen:
-                last = st.session_state.seen.pop()
-                st.session_state.deck[last] += 1
-            st.rerun()
-
-    with c2:
-        if st.button("🔄 Reset", use_container_width=True):
-            st.session_state.start = False
-            st.rerun()
+result = components.html(html_code, height=400)
