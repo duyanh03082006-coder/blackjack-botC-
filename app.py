@@ -1,123 +1,133 @@
 import streamlit as st
 
-# --- CẤU TRÚC GIAO DIỆN ---
-st.set_page_config(page_title="Máy Tính Bài Blackjack", layout="wide")
+st.set_page_config(page_title="Blackjack Decision Tool", layout="wide")
 
-# --- KHỞI TẠO DỮ LIỆU (SESSION STATE) ---
-if "bat_dau" not in st.session_state:
-    st.session_state.bat_dau = False
-if "danh_sach_bai" not in st.session_state:
-    st.session_state.danh_sach_bai = {}
-if "lich_su" not in st.session_state:
-    st.session_state.lich_su = []
-if "so_bo" not in st.session_state:
-    st.session_state.so_bo = 4
+# --- SESSION ---
+if "start" not in st.session_state:
+    st.session_state.start = False
+if "deck" not in st.session_state:
+    st.session_state.deck = {}
+if "player" not in st.session_state:
+    st.session_state.player = []
+if "dealer" not in st.session_state:
+    st.session_state.dealer = []
+if "num_decks" not in st.session_state:
+    st.session_state.num_decks = 4
 
-def lam_moi_bai():
-    cac_la = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
-    st.session_state.danh_sach_bai = {la: 4 * st.session_state.so_bo for la in cac_la}
-    st.session_state.lich_su = []
+# --- INIT ---
+def reset_game():
+    cards = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
+    st.session_state.deck = {c: 4 * st.session_state.num_decks for c in cards}
+    st.session_state.player = []
+    st.session_state.dealer = []
 
-def bam_la_bai(ten_la):
-    if st.session_state.danh_sach_bai[ten_la] > 0:
-        st.session_state.danh_sach_bai[ten_la] -= 1
-        st.session_state.lich_su.append(ten_la)
+def card_value(card):
+    if card in ['J','Q','K']: return 10
+    if card == 'A': return 11
+    return int(card)
 
-def hoan_tac():
-    if st.session_state.lich_su:
-        la_cu_cung = st.session_state.lich_su.pop()
-        st.session_state.danh_sach_bai[la_cu_cung] += 1
+def calc_score(hand):
+    total = sum(card_value(c) for c in hand)
+    aces = hand.count('A')
+    while total > 21 and aces:
+        total -= 10
+        aces -= 1
+    return total
 
-# --- MÀN HÌNH CÀI ĐẶT ---
-if not st.session_state.bat_dau:
-    st.title("🃏 Cài đặt đơn giản")
-    st.session_state.so_bo = st.number_input("Dùng mấy bộ bài?", min_value=1, max_value=8, value=4)
-    
-    if st.button("BẮT ĐẦU CHƠI", use_container_width=True):
-        lam_moi_bai()
-        st.session_state.bat_dau = True
+def add_card(target, card):
+    if st.session_state.deck[card] > 0:
+        st.session_state.deck[card] -= 1
+        target.append(card)
+
+def bust_probability(score):
+    total_cards = sum(st.session_state.deck.values())
+    bust = 0
+    for c, count in st.session_state.deck.items():
+        val = card_value(c)
+        if score + val > 21:
+            bust += count
+    return bust / total_cards if total_cards > 0 else 0
+
+# --- SETUP ---
+if not st.session_state.start:
+    st.title("🃏 Blackjack Decision Tool")
+
+    st.session_state.num_decks = st.number_input("Số bộ bài", 1, 8, 4)
+
+    if st.button("🚀 Bắt đầu", use_container_width=True):
+        reset_game()
+        st.session_state.start = True
         st.rerun()
 
-# --- MÀN HÌNH CHƠI CHÍNH ---
+# --- MAIN ---
 else:
-    # 1. Tính toán con số đơn giản (Hi-Lo system)
-    diem_dem = 0
-    for la in st.session_state.lich_su:
-        if la in ['2','3','4','5','6']: 
-            diem_dem += 1
-        elif la in ['10','J','Q','K','A']: 
-            diem_dem -= 1
-    
-    tong_con_lai = sum(st.session_state.danh_sach_bai.values())
-    decks_con_lai = tong_con_lai / 52
-    do_nong = diem_dem / decks_con_lai if decks_con_lai > 0.1 else diem_dem
+    st.title("🎯 Quyết định rút bài")
 
-    # 2. Hiển thị trạng thái bằng màu sắc
-    st.write(f"### Tình hình hiện tại:")
-    
-    col_status, col_count = st.columns(2)
-    with col_status:
-        if do_nong >= 2:
-            st.success("🔥 BÀI ĐANG ĐẸP (Nên đánh mạnh)")
-        elif do_nong <= -2:
-            st.error("❄️ BÀI ĐANG XẤU (Nên đánh nhỏ)")
+    # --- HIỂN THỊ BÀI ---
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("🧑 Bạn")
+        st.write(st.session_state.player)
+        p_score = calc_score(st.session_state.player)
+        st.metric("Điểm", p_score)
+
+    with col2:
+        st.subheader("🎩 Dealer")
+        st.write(st.session_state.dealer)
+        d_score = calc_score(st.session_state.dealer)
+        st.metric("Điểm (hiện tại)", d_score)
+
+    st.divider()
+
+    # --- PHÂN TÍCH ---
+    if st.session_state.player:
+        bust_prob = bust_probability(p_score)
+
+        st.write(f"💀 Xác suất BUST nếu rút: **{bust_prob*100:.1f}%**")
+
+        if bust_prob > 0.5:
+            st.error("❌ NÊN DỪNG")
+        elif bust_prob < 0.3:
+            st.success("✅ NÊN RÚT")
         else:
-            st.info("😐 Bài bình thường")
-            
-    with col_count:
-        st.metric("Số bài còn lại", f"{tong_con_lai} lá")
+            st.info("⚖️ CÂN NHẮC")
 
     st.divider()
 
-    # 3. Nút bấm lá bài (Thiết kế nút bấm to, dễ chạm)
-    st.write("### 👇 Vừa ra lá gì, bấm lá đó:")
-    
-    # Hàng 1: Bài nhỏ
-    cols1 = st.columns(5)
-    for i, la in enumerate(['2', '3', '4', '5', '6']):
-        with cols1[i]:
-            if st.button(la, key=f"btn_{la}", use_container_width=True):
-                bam_la_bai(la)
-                st.rerun()
-                
-    # Hàng 2: Bài trung bình và lớn
-    cols2 = st.columns(4)
-    for i, la in enumerate(['7', '8', '9', '10']):
-        with cols2[i]:
-            if st.button(la, key=f"btn_{la}", use_container_width=True):
-                bam_la_bai(la)
-                st.rerun()
-                
-    # Hàng 3: Bài Tây
-    cols3 = st.columns(4)
-    for i, la in enumerate(['J', 'Q', 'K', 'A']):
-        with cols3[i]:
-            if st.button(la, key=f"btn_{la}", use_container_width=True):
-                bam_la_bai(la)
+    # --- INPUT MODE ---
+    mode = st.radio("Thêm bài cho:", ["Bạn", "Dealer"], horizontal=True)
+
+    target = st.session_state.player if mode == "Bạn" else st.session_state.dealer
+
+    st.write("### 👇 Chọn lá bài")
+
+    cards = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
+
+    cols = st.columns(3)
+
+    for i, c in enumerate(cards):
+        with cols[i % 3]:
+            if st.button(c, key=f"{mode}_{c}", use_container_width=True):
+                add_card(target, c)
                 st.rerun()
 
     st.divider()
 
-    # 4. Dự báo tỉ lệ lá bài sắp tới
-    if tong_con_lai > 0:
-        la_nho = sum([st.session_state.danh_sach_bai[v] for v in ['2','3','4','5','6']])
-        la_lon = sum([st.session_state.danh_sach_bai[v] for v in ['10','J','Q','K','A']])
-        
-        c_nho, c_lon = st.columns(2)
-        c_nho.write(f"Tỉ lệ bài NHỎ (2-6): **{int(la_nho/tong_con_lai*100)}%**")
-        c_nho.progress(la_nho/tong_con_lai)
-        
-        c_lon.write(f"Tỉ lệ bài LỚN (10-A): **{int(la_lon/tong_con_lai*100)}%**")
-        c_lon.progress(la_lon/tong_con_lai)
+    # --- ACTION ---
+    c1, c2 = st.columns(2)
 
-    # 5. Chức năng phụ
-    st.write("---")
-    c_undo, c_reset = st.columns(2)
-    with c_undo:
-        if st.button("⏪ Bấm nhầm (Xóa lá cuối)", use_container_width=True):
-            hoan_tac()
+    with c1:
+        if st.button("🔄 Reset", use_container_width=True):
+            st.session_state.start = False
             st.rerun()
-    with c_reset:
-        if st.button("🔄 Đổi bộ mới / Cài lại", use_container_width=True):
-            st.session_state.bat_dau = False
+
+    with c2:
+        if st.button("↩️ Undo", use_container_width=True):
+            if mode == "Bạn" and st.session_state.player:
+                last = st.session_state.player.pop()
+                st.session_state.deck[last] += 1
+            elif mode == "Dealer" and st.session_state.dealer:
+                last = st.session_state.dealer.pop()
+                st.session_state.deck[last] += 1
             st.rerun()
