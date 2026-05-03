@@ -1,50 +1,34 @@
 import streamlit as st
-import pandas as pd
 
-st.set_page_config(page_title="Blackjack Bot Pro++", layout="wide")
-
-st.title("🃏 Blackjack Bot Pro++")
-st.subheader("Tool đếm bài + gợi ý chiến thuật")
+st.set_page_config(layout="wide")
 
 # --- INIT ---
-if 'history' not in st.session_state:
-    st.session_state.history = []
-if 'num_decks' not in st.session_state:
+if "started" not in st.session_state:
+    st.session_state.started = False
+
+if "num_decks" not in st.session_state:
     st.session_state.num_decks = 1
-if 'current_shoe' not in st.session_state:
+
+if "num_players" not in st.session_state:
+    st.session_state.num_players = 1
+
+if "shoe" not in st.session_state:
     values = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
-    st.session_state.current_shoe = {v: 4 for v in values}
+    st.session_state.shoe = {v: 4 for v in values}
+
+if "history" not in st.session_state:
+    st.session_state.history = []
 
 # --- FUNCTIONS ---
-def reset_game():
+def init_shoe():
     values = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
-    st.session_state.current_shoe = {v: 4 * st.session_state.num_decks for v in values}
+    st.session_state.shoe = {v: 4 * st.session_state.num_decks for v in values}
     st.session_state.history = []
 
-def add_card(val):
-    if st.session_state.current_shoe[val] > 0:
-        st.session_state.current_shoe[val] -= 1
-        st.session_state.history.append(val)
-
-def undo():
-    if st.session_state.history:
-        last = st.session_state.history.pop()
-        st.session_state.current_shoe[last] += 1
-
-def card_value(card):
-    if card in ['J','Q','K']:
-        return 10
-    if card == 'A':
-        return 11
-    return int(card)
-
-def hand_total(cards):
-    total = sum(card_value(c) for c in cards)
-    aces = cards.count('A')
-    while total > 21 and aces:
-        total -= 10
-        aces -= 1
-    return total
+def add_card(card):
+    if st.session_state.shoe[card] > 0:
+        st.session_state.shoe[card] -= 1
+        st.session_state.history.append(card)
 
 def running_count():
     count = 0
@@ -55,103 +39,59 @@ def running_count():
             count -= 1
     return count
 
-def bust_probability(player_cards):
-    total = hand_total(player_cards)
-    total_cards = sum(st.session_state.current_shoe.values())
-    
-    bust_cards = 0
-    for card, count in st.session_state.current_shoe.items():
-        if count > 0:
-            new_total = hand_total(player_cards + [card])
-            if new_total > 21:
-                bust_cards += count
-    
-    return bust_cards / total_cards if total_cards > 0 else 0
+# --- SCREEN 1 ---
+if not st.session_state.started:
 
-def suggest_action(player_cards, dealer_card):
-    total = hand_total(player_cards)
-    
-    if total <= 11:
-        return "HIT"
-    if total >= 17:
-        return "STAND"
-    
-    if 12 <= total <= 16:
-        if dealer_card in ['7','8','9','10','A']:
-            return "HIT"
-        else:
-            return "STAND"
-    
-    return "HIT"
+    st.title("🃏 Blackjack Setup")
 
-# --- SIDEBAR ---
-with st.sidebar:
-    st.header("⚙️ Cài đặt")
-    new_decks = st.number_input("Số bộ bài", 1, 8, st.session_state.num_decks)
-    if new_decks != st.session_state.num_decks:
-        st.session_state.num_decks = new_decks
-        reset_game()
-    
-    if st.button("Reset"):
-        reset_game()
-    if st.button("Undo"):
-        undo()
+    st.session_state.num_decks = st.number_input("Số bộ bài", 1, 8, 1)
+    st.session_state.num_players = st.number_input("Số người chơi", 1, 6, 1)
 
-# --- UI ---
-values = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
+    if st.button("🚀 Bắt đầu", use_container_width=True):
+        init_shoe()
+        st.session_state.started = True
+        st.rerun()
 
-st.write("### Chọn lá bài:")
-cols = st.columns(7)
-for i, v in enumerate(values):
-    with cols[i % 7]:
-        if st.button(v):
-            add_card(v)
+# --- SCREEN 2 ---
+else:
+    st.title("🎰 Blackjack Live")
 
-st.divider()
+    # Stats
+    total_cards = sum(st.session_state.shoe.values())
+    rc = running_count()
+    decks_left = total_cards / 52
+    tc = rc / decks_left if decks_left > 0 else 0
 
-# --- PLAYER INPUT ---
-st.write("### Nhập bài của bạn")
-player_input = st.text_input("Ví dụ: 10,A hoặc 9,7")
-dealer_card = st.selectbox("Lá nhà cái", values)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("🃏 Còn lại", total_cards)
+    col2.metric("🧮 Count", rc)
+    col3.metric("🎯 True Count", round(tc,2))
 
-player_cards = [x.strip() for x in player_input.split(",") if x.strip() in values]
+    st.divider()
 
-# --- STATS ---
-total_cards = sum(st.session_state.current_shoe.values())
-rc = running_count()
-remaining_decks = total_cards / 52
-true_count = rc / remaining_decks if remaining_decks > 0 else 0
+    # Buttons BIG
+    st.write("### 👇 Bấm lá bài vừa ra")
 
-col1, col2, col3 = st.columns(3)
+    values = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
+    cols = st.columns(4)
 
-col1.metric("🧮 Running Count", rc)
-col2.metric("🎯 True Count", round(true_count, 2))
-col3.metric("🃏 Còn lại", total_cards)
+    for i, v in enumerate(values):
+        with cols[i % 4]:
+            if st.button(v, use_container_width=True):
+                add_card(v)
+                st.rerun()
 
-# --- ANALYSIS ---
-if player_cards:
-    total = hand_total(player_cards)
-    bust_prob = bust_probability(player_cards)
-    action = suggest_action(player_cards, dealer_card)
+    st.divider()
 
-    st.write(f"### Tổng điểm: **{total}**")
-    st.write(f"💥 Xác suất bust nếu rút: **{round(bust_prob*100,2)}%**")
-    
-    if action == "HIT":
-        st.warning("👉 NÊN RÚT (HIT)")
+    # Quick suggestion
+    if tc > 2:
+        st.success("🔥 NÊN ĐÁNH MẠNH (nhiều 10/A)")
+    elif tc < -1:
+        st.warning("⚠️ CẨN THẬN (nhiều lá nhỏ)")
     else:
-        st.success("👉 NÊN DỪNG (STAND)")
+        st.info("😐 Bình thường")
 
-# --- TABLE ---
-data = []
-for v in values:
-    count = st.session_state.current_shoe[v]
-    prob = count / total_cards * 100 if total_cards else 0
-    data.append({"Lá": v, "Còn": count, "%": round(prob,2)})
-
-df = pd.DataFrame(data)
-st.dataframe(df, use_container_width=True, hide_index=True)
-
-# --- HISTORY ---
-with st.expander("Lịch sử"):
-    st.write(", ".join(st.session_state.history))
+    # Reset
+    if st.button("🔄 Chơi lại"):
+        st.session_state.started = False
+        st.rerun()
